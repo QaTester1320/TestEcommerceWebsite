@@ -59,6 +59,7 @@
             width: 90%;
             max-width: 1200px;
             margin: 0 auto;
+            gap: 1.5rem;
         }
 
         .logo {
@@ -66,7 +67,41 @@
             font-weight: 700;
             color: var(--primary-color);
             text-decoration: none;
+            flex-shrink: 0;
         }
+
+        /* --- Search Bar --- */
+        .search-form {
+            display: flex;
+            flex-grow: 1;
+            max-width: 500px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .search-form input {
+            flex-grow: 1;
+            border: none;
+            padding: 0.6rem 1rem;
+            font-size: 1rem;
+            outline: none;
+        }
+        
+        .search-form button {
+            background-color: var(--primary-color);
+            border: none;
+            color: white;
+            padding: 0 1.2rem;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .search-form button:hover {
+            background-color: var(--secondary-color);
+        }
+        /* --- End Search Bar --- */
 
         .main-nav ul {
             list-style: none;
@@ -1098,6 +1133,34 @@
                 flex: 0 0 auto; /* Allow sidebar to grow */
                 width: 100%;
             }
+
+            /* --- Fix for header on medium screens --- */
+            .header-container {
+                flex-wrap: wrap; /* Allow items to wrap */
+                row-gap: 1rem; /* Add gap between rows */
+            }
+            
+            .logo {
+                flex-basis: 40%; /* Give logo space */
+                flex-shrink: 0;
+            }
+            
+            .search-form {
+                order: 3; /* Move search to the bottom row */
+                width: 100%; /* Make it full width */
+                max-width: none; /* Remove max-width */
+            }
+            
+            .main-nav {
+                flex-basis: 60%; /* Give nav space */
+                flex-grow: 1; /* Allow it to grow */
+            }
+            
+            .main-nav ul {
+                flex-wrap: wrap; /* Allow nav links to wrap */
+                justify-content: flex-end;
+            }
+            /* --- End header fix --- */
         }
         
         @media (max-width: 768px) {
@@ -1203,6 +1266,13 @@
     <header class="site-header">
         <div class="header-container">
             <a href="#home" class="logo">QA Test Store</a>
+            
+            <!-- Search Form -->
+            <form class="search-form" id="search-form">
+                <input type="search" id="search-input" placeholder="Search by name or SKU...">
+                <button type="submit">🔍</button>
+            </form>
+            
             <nav class="main-nav">
                 <ul>
                     <li><a href="#home" class="nav-link-header active" data-page="page-home">Home</a></li>
@@ -1770,6 +1840,7 @@
             let currentModalConfirmCallback = () => {};
             let appliedCoupon = null;
             let discountAmount = 0;
+            let currentSearchTerm = '';
             
             // Constants
             const shippingCost = 5.00;
@@ -1812,6 +1883,10 @@
             const billingAddressGroup = document.getElementById('billing-address-group');
             const checkoutCountrySelect = document.getElementById('checkout-country');
             const checkoutCardInput = document.getElementById('checkout-card');
+            
+            // Search Selectors
+            const searchForm = document.getElementById('search-form');
+            const searchInput = document.getElementById('search-input');
             
             // Modal Selectors
             const modal = document.getElementById('confirmation-modal');
@@ -2020,6 +2095,36 @@
                     billingAddressGroup.classList.toggle('hidden', e.target.checked);
                 });
                 checkoutCountrySelect.addEventListener('change', handleCountryChange);
+                
+                // Search Form
+                // Listener for "Enter" key or submit button click
+                searchForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    currentSearchTerm = searchInput.value.trim().toLowerCase();
+                    
+                    // If we are already on the products page, just apply filters
+                    // Otherwise, navigate to it, which will trigger applyFilters
+                    if (window.location.hash.startsWith('#products')) {
+                        applyFilters();
+                    } else {
+                        window.location.hash = 'products';
+                    }
+                });
+
+                // Listener for live typing (instant search)
+                searchInput.addEventListener('input', () => {
+                    currentSearchTerm = searchInput.value.trim().toLowerCase();
+
+                    // If the user is typing, we assume they want to see the product page.
+                    if (window.location.hash.startsWith('#products')) {
+                        // If we are already on the products page, just apply filters
+                        applyFilters();
+                    } else {
+                        // If on another page, navigate to products page to show results
+                        // The `handleHashChange` will trigger `applyFilters`
+                        window.location.hash = 'products';
+                    }
+                });
                 
                 // Filter buttons
                 applyFiltersBtn.addEventListener('click', applyFilters);
@@ -2395,14 +2500,27 @@
                 const minPrice = parseFloat(priceMinInput.value) || 0;
                 const maxPrice = parseFloat(priceMaxInput.value) || Infinity;
                 
-                let filteredProducts = products.filter(product => {
-                    // Category filter
-                    const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(product.category);
-                    
-                    // Price filter
-                    const priceMatch = product.price >= minPrice && product.price <= maxPrice;
-                    
-                    return categoryMatch && priceMatch;
+                let filteredProducts = products;
+                
+                // Step 1: Filter by Search Term (if any)
+                if (currentSearchTerm) {
+                    filteredProducts = filteredProducts.filter(product => {
+                        const nameMatch = product.name.toLowerCase().includes(currentSearchTerm);
+                        const skuMatch = product.sku.toLowerCase().includes(currentSearchTerm);
+                        return nameMatch || skuMatch;
+                    });
+                }
+                
+                // Step 2: Filter by Category
+                if (selectedCategories.length > 0) {
+                    filteredProducts = filteredProducts.filter(product => 
+                        selectedCategories.includes(product.category)
+                    );
+                }
+                
+                // Step 3: Filter by Price
+                filteredProducts = filteredProducts.filter(product => {
+                    return product.price >= minPrice && product.price <= maxPrice;
                 });
                 
                 renderProducts(productGrid, filteredProducts);
@@ -2417,6 +2535,10 @@
                 });
                 priceMinInput.value = '';
                 priceMaxInput.value = '';
+                
+                // Also clear search
+                currentSearchTerm = '';
+                searchInput.value = '';
                 
                 renderProducts(productGrid, products);
             }
@@ -3131,6 +3253,7 @@
                         discountAmount = 0;
                     }
                 }
+                // Do not load currentSearchTerm, as it's not saved
                 updateCartSummary();
                 updateNav();
             }
@@ -3174,4 +3297,3 @@
     </script>
 </body>
 </html>
-
